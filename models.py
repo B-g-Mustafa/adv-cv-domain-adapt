@@ -1,5 +1,6 @@
 import torch
 import torch.nn as nn
+import torchvision.models as tv_models
 
 
 class ResBlock(nn.Module):
@@ -116,3 +117,30 @@ def init_weights(net):
             if m.bias is not None:
                 nn.init.constant_(m.bias.data, 0.0)
     net.apply(init_func)
+
+
+def load_pretrained_encoder(generator):
+    """
+    Copy the first conv layer weights from a pretrained ResNet-18
+    (ImageNet) into the generator's c7s1-64 layer.
+
+    Only the very first Conv2d (3→64, 7×7) is replaced because:
+      - It matches the generator's c7s1-64 layer exactly in shape.
+      - d128 (64→128) and d256 (128→256) have different channel sizes
+        from ResNet-18 internals so they are left with random init.
+      - The 9 ResBlocks and decoder are task-specific — always random init.
+
+    The pretrained weights are NOT frozen — they continue to update
+    during training just like any other parameter.
+    """
+    resnet = tv_models.resnet18(weights=tv_models.ResNet18_Weights.DEFAULT)
+
+    # generator.model[0] is the first nn.Conv2d (c7s1-64)
+    # resnet.conv1 is also Conv2d(3, 64, kernel_size=7)
+    # Shapes match exactly: (64, 3, 7, 7)
+    with torch.no_grad():
+        generator.model[0].weight.copy_(resnet.conv1.weight)
+        # bias=False on this layer so no bias to copy
+
+    print("[Pretrained] Loaded ResNet-18 ImageNet weights → generator c7s1-64 layer.")
+    return generator

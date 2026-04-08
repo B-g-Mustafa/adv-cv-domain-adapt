@@ -50,17 +50,20 @@ def save_images(epoch, real_P, fake_S, real_S, fake_P, save_dir='outputs'):
 
 def save_checkpoint(epoch, G_P2S, G_S2P, D_P, D_S,
                     optimizer_G, optimizer_D_P, optimizer_D_S,
-                    checkpoint_dir='checkpoints'):
+                    checkpoint_dir='checkpoints', use_pretrained=None):
     os.makedirs(checkpoint_dir, exist_ok=True)
     path = os.path.join(checkpoint_dir, f'ckpt_epoch_{epoch:03d}.pth')
-    torch.save({
+    payload = {
         'epoch': epoch,
         'G_P2S': G_P2S.state_dict(),
         'G_S2P': G_S2P.state_dict(),
         'D_P':   D_P.state_dict(),
         'D_S':   D_S.state_dict(),
-        'optimizer_G':   optimizer_G.state_dict(),
-        'optimizer_D_P': optimizer_D_P.state_dict(),
-        'optimizer_D_S': optimizer_D_S.state_dict(),
-    }, path)
+        'opt_G':   optimizer_G.state_dict(),
+        'opt_D_P': optimizer_D_P.state_dict(),
+        'opt_D_S': optimizer_D_S.state_dict(),
+    }
+    if use_pretrained is not None:
+        payload['use_pretrained'] = use_pretrained
+    torch.save(payload, path)
     print(f'  [✓] Checkpoint saved → {path}')

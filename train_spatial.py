@@ -10,7 +10,7 @@ import torch.nn as nn
 
 import config
 from dataset import get_loaders
-from models import Generator, Discriminator, init_weights
+from models import Generator, Discriminator, init_weights, load_pretrained_encoder
 from utils import ReplayBuffer, save_images, save_checkpoint
 
 
@@ -28,7 +28,13 @@ def build_lr_lambda(num_epochs=config.NUM_EPOCHS):
 
 def train():
     device = torch.device(config.DEVICE)
-    print(f'Using device: {device}')
+
+    print("=" * 50)
+    print(f"  CycleGAN — PACS Photo → Sketch")
+    print(f"  Pretrained encoder : {config.USE_PRETRAINED}")
+    print(f"  Device             : {config.DEVICE}")
+    print(f"  Epochs             : {config.NUM_EPOCHS}")
+    print("=" * 50)
 
     # ------------------------------------------------------------------ data
     loader_photo, loader_sketch = get_loaders()
@@ -41,8 +47,18 @@ def train():
     D_P   = Discriminator().to(device)
     D_S   = Discriminator().to(device)
 
-    for net in (G_P2S, G_S2P, D_P, D_S):
-        init_weights(net)
+    # Always initialise all weights first with Gaussian(0, 0.02)
+    init_weights(G_P2S)
+    init_weights(G_S2P)
+    init_weights(D_P)
+    init_weights(D_S)
+
+    # Then optionally overwrite the encoder's first layer with pretrained weights
+    if config.USE_PRETRAINED:
+        load_pretrained_encoder(G_P2S)
+        load_pretrained_encoder(G_S2P)
+    else:
+        print("[Scratch] Training fully from random initialisation.")
 
     # -------------------------------------------------------------- losses
     criterion_GAN      = nn.MSELoss()
@@ -162,6 +178,7 @@ def train():
                 epoch, G_P2S, G_S2P, D_P, D_S,
                 optimizer_G, optimizer_D_P, optimizer_D_S,
                 checkpoint_dir=config.CHECKPOINT_DIR + '/spatial',
+                use_pretrained=config.USE_PRETRAINED,
             )
 
     print('Training complete.')
