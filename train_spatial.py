@@ -4,6 +4,7 @@ Photo ↔ Sketch domain adaptation on the PACS dataset.
 """
 
 import itertools
+import os
 
 import torch
 import torch.nn as nn
@@ -11,7 +12,7 @@ import torch.nn as nn
 import config
 from dataset import get_loaders
 from models import Generator, Discriminator, init_weights, load_pretrained_encoder
-from utils import ReplayBuffer, save_images, save_checkpoint
+from utils import ReplayBuffer, save_images, save_checkpoint, find_latest_checkpoint, load_checkpoint
 
 
 def build_lr_lambda(num_epochs=config.NUM_EPOCHS):
@@ -28,13 +29,6 @@ def build_lr_lambda(num_epochs=config.NUM_EPOCHS):
 
 def train():
     device = torch.device(config.DEVICE)
-
-    print("=" * 50)
-    print(f"  CycleGAN — PACS Photo → Sketch")
-    print(f"  Pretrained encoder : {config.USE_PRETRAINED}")
-    print(f"  Device             : {config.DEVICE}")
-    print(f"  Epochs             : {config.NUM_EPOCHS}")
-    print("=" * 50)
 
     # ------------------------------------------------------------------ data
     loader_photo, loader_sketch = get_loaders()
@@ -86,8 +80,53 @@ def train():
     buffer_S = ReplayBuffer(config.BUFFER_SIZE)
     buffer_P = ReplayBuffer(config.BUFFER_SIZE)
 
+    # ---------------------------------------------------------- resume logic
+    start_epoch = 0
+
+    if config.RESUME:
+        if config.RESUME_EPOCH == -1:
+            ckpt_path = find_latest_checkpoint(config.CHECKPOINT_DIR + '/spatial')
+        else:
+            ckpt_path = os.path.join(
+                config.CHECKPOINT_DIR + '/spatial', f'epoch_{config.RESUME_EPOCH:03d}.pth'
+            )
+
+        if ckpt_path and os.path.exists(ckpt_path):
+            start_epoch = load_checkpoint(
+                ckpt_path,
+                G_P2S, G_S2P, D_P, D_S,
+                optimizer_G, optimizer_D_P, optimizer_D_S,
+                device,
+            )
+        else:
+            print(f"[Resume] No checkpoint found at: {ckpt_path}")
+            print("[Resume] Starting from scratch instead.")
+    else:
+        print("[Scratch] RESUME=False — starting from epoch 0.")
+
+    # Fast-forward LR schedulers to the correct position
+    if start_epoch > 0:
+        for _ in range(start_epoch):
+            scheduler_G.step()
+            scheduler_D_P.step()
+            scheduler_D_S.step()
+        print(f"[Resume] LR schedulers fast-forwarded to epoch {start_epoch}.")
+
+    # ------------------------------------------ startup banner (post-resume)
+    print("=" * 50)
+    print(f"  CycleGAN — PACS Photo → Sketch")
+    print(f"  Pretrained encoder : {config.USE_PRETRAINED}")
+    print(f"  Device             : {config.DEVICE}")
+    print(f"  Epochs             : {config.NUM_EPOCHS}")
+    print(f"  Resume             : {config.RESUME}")
+    if config.RESUME:
+        mode = 'latest' if config.RESUME_EPOCH == -1 else f'epoch {config.RESUME_EPOCH}'
+        print(f"  Resume mode        : {mode}")
+    print(f"  Starting epoch     : {start_epoch}")
+    print("=" * 50)
+
     # ---------------------------------------------------------- training loop
-    for epoch in range(config.NUM_EPOCHS):
+    for epoch in range(start_epoch, config.NUM_EPOCHS):
         for batch_idx, (real_P, real_S) in enumerate(
                 zip(loader_photo, loader_sketch)):
 

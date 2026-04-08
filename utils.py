@@ -1,3 +1,4 @@
+import glob
 import os
 import random
 
@@ -52,7 +53,7 @@ def save_checkpoint(epoch, G_P2S, G_S2P, D_P, D_S,
                     optimizer_G, optimizer_D_P, optimizer_D_S,
                     checkpoint_dir='checkpoints', use_pretrained=None):
     os.makedirs(checkpoint_dir, exist_ok=True)
-    path = os.path.join(checkpoint_dir, f'ckpt_epoch_{epoch:03d}.pth')
+    path = os.path.join(checkpoint_dir, f'epoch_{epoch:03d}.pth')
     payload = {
         'epoch': epoch,
         'G_P2S': G_P2S.state_dict(),
@@ -67,3 +68,46 @@ def save_checkpoint(epoch, G_P2S, G_S2P, D_P, D_S,
         payload['use_pretrained'] = use_pretrained
     torch.save(payload, path)
     print(f'  [✓] Checkpoint saved → {path}')
+
+
+def find_latest_checkpoint(checkpoint_dir):
+    """
+    Scan checkpoint_dir for files matching epoch_NNN.pth.
+    Return the path with the highest epoch number, or None if none exist.
+    """
+    pattern = os.path.join(checkpoint_dir, 'epoch_*.pth')
+    files = glob.glob(pattern)
+    if not files:
+        return None
+    files.sort(key=lambda f: int(os.path.basename(f)
+                                   .replace('epoch_', '')
+                                   .replace('.pth', '')))
+    return files[-1]
+
+
+def load_checkpoint(path, G_P2S, G_S2P, D_P, D_S,
+                    optimizer_G, optimizer_D_P, optimizer_D_S, device):
+    """
+    Load a checkpoint saved by the training loop.
+    Returns the epoch number to resume FROM (i.e. saved_epoch + 1).
+    """
+    print(f"[Resume] Loading checkpoint: {path}")
+    ckpt = torch.load(path, map_location=device)
+
+    G_P2S.load_state_dict(ckpt['G_P2S'])
+    G_S2P.load_state_dict(ckpt['G_S2P'])
+    D_P.load_state_dict(ckpt['D_P'])
+    D_S.load_state_dict(ckpt['D_S'])
+    optimizer_G.load_state_dict(ckpt['opt_G'])
+    optimizer_D_P.load_state_dict(ckpt['opt_D_P'])
+    optimizer_D_S.load_state_dict(ckpt['opt_D_S'])
+
+    saved_epoch = ckpt['epoch']
+    print(f"[Resume] Restored from epoch {saved_epoch}. "
+          f"Resuming from epoch {saved_epoch + 1}.")
+
+    if 'use_pretrained' in ckpt:
+        print(f"[Resume] Checkpoint was trained with "
+              f"USE_PRETRAINED={ckpt['use_pretrained']}")
+
+    return saved_epoch + 1

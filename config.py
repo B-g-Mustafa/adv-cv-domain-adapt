@@ -23,3 +23,10 @@ DATA_ROOT       = 'data/pacs'
 OUTPUT_DIR      = 'outputs'
 CHECKPOINT_DIR  = 'checkpoints'
 SAVE_CHECKPOINT_EVERY = 20
+
+# Resume controls
+RESUME          = False   # True = resume from a checkpoint
+                          # False = start fresh from epoch 0
+RESUME_EPOCH    = -1      # -1 = auto-find the latest checkpoint
+                          #  N = resume from a specific epoch number
+                          #      e.g. RESUME_EPOCH = 40 loads epoch_040.pth
