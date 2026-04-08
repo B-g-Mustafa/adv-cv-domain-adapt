@@ -16,7 +16,7 @@ USE_PRETRAINED  = True   # toggle: True = load ResNet-18 encoder weights
                          #         False = train fully from scratch (random init)
 
 # Spectral CycleGAN only
-BETA_FREQ       = 0.01         # fraction of spectrum to translate (tune this)
+BETA_FREQ       = 0.1          # fraction of spectrum to translate (tune this)
 
 # Paths
 DATA_ROOT       = 'data/pacs'

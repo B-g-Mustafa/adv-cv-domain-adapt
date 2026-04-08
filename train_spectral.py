@@ -66,7 +66,17 @@ def spectral_translate(G, src_img, tgt_img, beta):
     phase_src = torch.angle(low_src)  # (B, C, h_crop, w_crop), real
 
     # G translates amplitude patch; input must be real-valued
-    amp_translated = G(amp_src)       # (B, C, h_crop, w_crop)
+    amp_translated = G(amp_src)       # may be different size due to stride/padding
+
+    # Crop or center-slice the output back to amp_src shape
+    # (Generator designed for 256×256; arbitrary patches may not preserve size)
+    B, C, h_target, w_target = amp_src.shape
+    _, _, h_out, w_out = amp_translated.shape
+    if (h_out, w_out) != (h_target, w_target):
+        # Center-crop to match
+        h_start = max(0, (h_out - h_target) // 2)
+        w_start = max(0, (w_out - w_target) // 2)
+        amp_translated = amp_translated[:, :, h_start:h_start+h_target, w_start:w_start+w_target]
 
     # Reconstruct the full spectrum with translated amplitude + original phase
     h_start, w_start, h_crop, w_crop = crop_info
