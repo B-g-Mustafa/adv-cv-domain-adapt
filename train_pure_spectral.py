@@ -37,6 +37,29 @@ def get_low_mask(B, C, H, W, beta, device):
     mask[:, :, cy - bh:cy + bh, cx - bw:cx + bw] = 1.0
     return mask
 
+def get_gaussian_mask(B, C, H, W, beta, device):
+    """Creates a smooth Gaussian mask to prevent ringing artifacts."""
+    mask = torch.zeros(B, C, H, W, device=device)
+    cy, cx = H // 2, W // 2
+
+    # Create coordinate grids
+    y = torch.arange(0, H, device=device).float() - cy
+    x = torch.arange(0, W, device=device).float() - cx
+    y, x = torch.meshgrid(y, x, indexing='ij')
+
+    # Calculate radius squared
+    r2 = (x ** 2) + (y ** 2)
+
+    # Variance based on beta
+    sigma = (beta * H) / 2.0
+
+    # Gaussian formula
+    gaussian = torch.exp(-r2 / (2 * sigma ** 2))
+
+    # Broadcast to match batch and channels
+    mask[0, 0, :, :] = gaussian
+    return mask.expand(B, C, H, W)
+
 
 def encode_to_amplitude_map(img, beta):
     """
@@ -47,7 +70,9 @@ def encode_to_amplitude_map(img, beta):
     device = img.device
 
     fft = to_freq(img)
-    mask = get_low_mask(B, C, H, W, beta, device)
+
+    # mask = get_low_mask(B, C, H, W, beta, device)
+    mask = get_gaussian_mask(B, C, H, W, beta, device)
 
     # 1. Extract Phase (crucial for structural reconstruction later)
     phase = torch.angle(fft)
