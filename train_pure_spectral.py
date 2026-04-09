@@ -270,6 +270,15 @@ def train():
                 # Save out the spatial pixels so you can evaluate the visual quality
                 save_images(epoch, real_P_img, fake_S_img, real_S_img, fake_P_img,
                             save_dir=config.OUTPUT_DIR + '/pure_spectral')
+        # ====================== SAVE CHECKPOINTS ======================
+        if (epoch + 1) % config.SAVE_CHECKPOINT_EVERY == 0:
+            save_checkpoint(
+                epoch, G_P2S, G_S2P, D_P, D_S,
+                optimizer_G, optimizer_D_P, optimizer_D_S,
+                # Change the directory so you don't overwrite your bottleneck run!
+                checkpoint_dir=config.CHECKPOINT_DIR + '/pure_spectral',
+                use_pretrained=config.USE_PRETRAINED,
+            )
 
     print('Training complete.')
 
