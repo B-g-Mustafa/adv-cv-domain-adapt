@@ -19,7 +19,7 @@ import config
 from dataset import get_loaders
 from models import Generator
 from utils import denorm
-from train_spectral import spectral_translate
+from train_spectral_bottleneck import spectral_translate
 
 
 def load_generators(checkpoint_path, device):

@@ -16,77 +16,63 @@ from models import Generator, Discriminator, init_weights, load_pretrained_encod
 from utils import ReplayBuffer, save_images, save_checkpoint, find_latest_checkpoint, load_checkpoint
 
 
-# ---------------------------------------------------------------- spectral utils
 
-def extract_low_freq(img, beta):
+
+def spectral_translate(G, src_img, beta):
     """
-    Extract the low-frequency sub-region from the centre of the FFT spectrum.
-
-    Args:
-        img  : (B, C, H, W) real-valued tensor in [-1, 1]
-        beta : fraction of H and W to keep (e.g. 0.01 → 1% of spatial freqs)
-
-    Returns:
-        F_shift  : full shifted FFT (complex)
-        low_freq : centre crop of F_shift (complex)
-        crop_info: (h_start, w_start, h_crop, w_crop)
-    """
-    F = torch.fft.fft2(img)
-    F_shift = torch.fft.fftshift(F)
-    B, C, H, W = img.shape
-    h_crop  = max(1, int(H * beta))
-    w_crop  = max(1, int(W * beta))
-    h_start = H // 2 - h_crop // 2
-    w_start = W // 2 - w_crop // 2
-    low_freq = F_shift[:, :, h_start:h_start + h_crop, w_start:w_start + w_crop]
-    return F_shift, low_freq, (h_start, w_start, h_crop, w_crop)
-
-
-def spectral_translate(G, src_img, tgt_img, beta):
-    """
-    Translate only the low-frequency amplitude of src_img toward the style
-    of tgt_img using generator G, then reconstruct back to pixel space.
-
-    The generator G maps (low-freq amplitude patch) → (translated amplitude patch).
-    Phase is preserved from the source image.
+    Translate the low-frequency amplitude of src_img using generator G.
+    Phase is perfectly preserved.
 
     Args:
         G       : Generator network
-        src_img : source domain image  (B, C, H, W)
-        tgt_img : target domain image  (B, C, H, W)  — used for style reference
-        beta    : low-freq fraction
+        src_img : source domain image (B, C, H, W)
+        beta    : fraction of low frequencies to modify (0.0 to 1.0)
 
     Returns:
-        img_out : reconstructed image in pixel space (B, C, H, W), real-valued
+        img_out : reconstructed image in pixel space (B, C, H, W)
     """
-    F_src, low_src, crop_info = extract_low_freq(src_img, beta)
-    _,     low_tgt, _         = extract_low_freq(tgt_img, beta)
+    B, C, H, W = src_img.shape
 
-    amp_src   = torch.abs(low_src)    # (B, C, h_crop, w_crop), real
-    phase_src = torch.angle(low_src)  # (B, C, h_crop, w_crop), real
+    # 1. Fourier Transform & Shift
+    F_src = torch.fft.fft2(src_img)
+    F_shift = torch.fft.fftshift(F_src)
 
-    # G translates amplitude patch; input must be real-valued
-    amp_translated = G(amp_src)       # may be different size due to stride/padding
+    # 2. Separate Amplitude and Phase
+    amp_src = torch.abs(F_shift)
+    phase_src = torch.angle(F_shift)
 
-    # Crop or center-slice the output back to amp_src shape
-    # (Generator designed for 256×256; arbitrary patches may not preserve size)
-    B, C, h_target, w_target = amp_src.shape
-    _, _, h_out, w_out = amp_translated.shape
-    if (h_out, w_out) != (h_target, w_target):
-        # Center-crop to match
-        h_start = max(0, (h_out - h_target) // 2)
-        w_start = max(0, (w_out - w_target) // 2)
-        amp_translated = amp_translated[:, :, h_start:h_start+h_target, w_start:w_start+w_target]
+    # 3. Log-Scale the Amplitude
+    # FFT amplitudes are massive. Log scaling compresses them so the GAN's
+    # activation functions (Tanh/ReLU) don't instantly saturate and explode.
+    amp_log = torch.log(amp_src + 1e-8)
 
-    # Reconstruct the full spectrum with translated amplitude + original phase
-    h_start, w_start, h_crop, w_crop = crop_info
-    F_new = F_src.clone()
-    new_low = amp_translated * torch.exp(1j * phase_src)
-    F_new[:, :, h_start:h_start + h_crop, w_start:w_start + w_crop] = new_low
+    # 4. Generator Translation (on the full spatial dimension)
+    # We pass the full size so the ResNet Generator maintains its receptive 
+    # field and internal dimensionality.
+    amp_translated_log = G(amp_log)
 
-    # Inverse FFT back to pixel space
+    # 5. Inverse Log-Scale
+    amp_translated = torch.exp(amp_translated_log)
+
+    # 6. Create a Low-Frequency Mask based on beta
+    h_crop = max(1, int(H * beta))
+    w_crop = max(1, int(W * beta))
+    h_start = H // 2 - h_crop // 2
+    w_start = W // 2 - w_crop // 2
+
+    mask = torch.zeros_like(amp_src)
+    mask[:, :, h_start:h_start+h_crop, w_start:w_start+w_crop] = 1.0
+
+    # 7. Blend: Use translated amplitude for low freqs, original for high freqs
+    amp_new = (amp_translated * mask) + (amp_src * (1.0 - mask))
+
+    # 8. Recombine with Original Phase
+    F_new = amp_new * torch.exp(1j * phase_src)
+
+    # 9. Inverse FFT back to spatial domain
     F_ishift = torch.fft.ifftshift(F_new)
-    img_out  = torch.fft.ifft2(F_ishift).real
+    img_out = torch.fft.ifft2(F_ishift).real
+
     return img_out
 
 
@@ -211,14 +197,12 @@ def train():
             optimizer_G.zero_grad()
 
             # Identity losses (operate in spectral space too)
-            loss_id_P = criterion_identity(
-                spectral_translate(G_S2P, real_P, real_P, beta), real_P)
-            loss_id_S = criterion_identity(
-                spectral_translate(G_P2S, real_S, real_S, beta), real_S)
+            loss_id_P = criterion_identity(spectral_translate(G_S2P, real_P, beta), real_P)
+            loss_id_S = criterion_identity(spectral_translate(G_P2S, real_S, beta), real_S)
 
             # Forward translations
-            fake_S = spectral_translate(G_P2S, real_P, real_S, beta)
-            fake_P = spectral_translate(G_S2P, real_S, real_P, beta)
+            fake_S = spectral_translate(G_P2S, real_P, beta)
+            fake_P = spectral_translate(G_S2P, real_S, beta)
 
             # Adversarial losses
             loss_adv_P2S = criterion_GAN(D_S(fake_S),
@@ -227,8 +211,8 @@ def train():
                                          torch.ones_like(D_P(fake_P)))
 
             # Cycle consistency losses
-            rec_P = spectral_translate(G_S2P, fake_S, real_P, beta)
-            rec_S = spectral_translate(G_P2S, fake_P, real_S, beta)
+            rec_P = spectral_translate(G_S2P, fake_S, beta)
+            rec_S = spectral_translate(G_P2S, fake_P, beta)
             loss_cycle_P = criterion_cycle(rec_P, real_P)
             loss_cycle_S = criterion_cycle(rec_S, real_S)
 
