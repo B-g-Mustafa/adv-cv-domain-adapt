@@ -197,9 +197,12 @@ def train():
             # ====================== Train Generators ======================
             optimizer_G.zero_grad()
 
-            # Identity losses (operate in spectral space too)
-            loss_id_A = criterion_identity(spectral_translate(G_D2A, real_A, beta), real_A)
-            loss_id_D = criterion_identity(spectral_translate(G_A2D, real_D, beta), real_D)
+            # Identity losses — always a direct G() call, never spectral_translate().
+            # An amazon image fed to G_D2A (webcam→amazon) should come back unchanged,
+            # and vice-versa. Wrapping this in spectral_translate would inject the
+            # frequency blend and destroy the identity signal.
+            loss_id_A = criterion_identity(G_D2A(real_A), real_A)
+            loss_id_D = criterion_identity(G_A2D(real_D), real_D)
 
             # Forward translations
             fake_D = spectral_translate(G_A2D, real_A, beta)

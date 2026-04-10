@@ -183,12 +183,54 @@ def train():
     # I recommend starting with 0.05 for pure frequency mapping
     beta = getattr(config, 'BETA_FREQ', 0.05)
 
+    # ---------------------------------------------------------- resume logic
+    start_epoch = 0
+
+    if config.RESUME:
+        if config.RESUME_EPOCH == -1:
+            ckpt_path = find_latest_checkpoint(config.CHECKPOINT_DIR + '/pure_spectral')
+        else:
+            ckpt_path = os.path.join(
+                config.CHECKPOINT_DIR + '/pure_spectral',
+                f'epoch_{config.RESUME_EPOCH:03d}.pth',
+            )
+
+        if ckpt_path and os.path.exists(ckpt_path):
+            start_epoch = load_checkpoint(
+                ckpt_path,
+                G_A2D, G_D2A, D_A, D_D,
+                optimizer_G, optimizer_D_A, optimizer_D_D,
+                device,
+            )
+        else:
+            print(f"[Resume] No checkpoint found at: {ckpt_path}")
+            print("[Resume] Starting from scratch instead.")
+    else:
+        print("[Scratch] RESUME=False — starting from epoch 0.")
+
+    # Fast-forward LR schedulers to the correct position
+    if start_epoch > 0:
+        for _ in range(start_epoch):
+            scheduler_G.step()
+            scheduler_D_A.step()
+            scheduler_D_D.step()
+        print(f"[Resume] LR schedulers fast-forwarded to epoch {start_epoch}.")
+
+    # ------------------------------------------ startup banner (post-resume)
     print("=" * 50)
     print(f"  PURE FREQUENCY CycleGAN — Office-31 Amazon → webcam")
     print(f"  Beta Window        : {beta}")
+    print(f"  Pretrained encoder : {config.USE_PRETRAINED}")
+    print(f"  Device             : {config.DEVICE}")
+    print(f"  Epochs             : {config.NUM_EPOCHS}")
+    print(f"  Resume             : {config.RESUME}")
+    if config.RESUME:
+        mode = 'latest' if config.RESUME_EPOCH == -1 else f'epoch {config.RESUME_EPOCH}'
+        print(f"  Resume mode        : {mode}")
+    print(f"  Starting epoch     : {start_epoch}")
     print("=" * 50)
 
-    for epoch in range(config.NUM_EPOCHS):
+    for epoch in range(start_epoch, config.NUM_EPOCHS):
         for batch_idx, (real_A_img, real_D_img) in enumerate(zip(loader_A, loader_D)):
 
             real_A_img = real_A_img.to(device)
