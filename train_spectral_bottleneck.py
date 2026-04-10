@@ -140,7 +140,7 @@ def train():
     buffer_D = ReplayBuffer(config.BUFFER_SIZE)
     buffer_A = ReplayBuffer(config.BUFFER_SIZE)
 
-    beta = config.BETA_FREQ
+    beta = config.BETA_FREQ_BOTTLENECK
 
     # ---------------------------------------------------------- resume logic
     start_epoch = 0

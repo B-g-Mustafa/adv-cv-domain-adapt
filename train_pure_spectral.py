@@ -181,7 +181,7 @@ def train():
     buffer_A = ReplayBuffer(config.BUFFER_SIZE)
 
     # I recommend starting with 0.05 for pure frequency mapping
-    beta = getattr(config, 'BETA_FREQ', 0.05)
+    beta = getattr(config, 'BETA_FREQ_PURE', 0.05)
 
     # ---------------------------------------------------------- resume logic
     start_epoch = 0

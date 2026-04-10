@@ -16,7 +16,8 @@ USE_PRETRAINED  = True   # toggle: True = load ResNet-18 encoder weights
                          #         False = train fully from scratch (random init)
 
 # Spectral CycleGAN only
-BETA_FREQ       = 0.5          # fraction of spectrum to translate (tune this)
+BETA_FREQ_PURE       = 0.08          # fraction of spectrum to translate (tune this)
+BETA_FREQ_BOTTLENECK       = 0.1
 
 # Paths
 DATA_ROOT       = 'data/Office31'
