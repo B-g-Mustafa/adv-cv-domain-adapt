@@ -3,9 +3,9 @@ Qualitative evaluation: load a checkpoint and generate translated images
 for a fixed set of samples from each domain.
 
 Usage:
-    python evaluate.py --checkpoint checkpoints/spatial/ckpt_epoch_199.pth \
+    python evaluate.py --checkpoint checkpoints_amazon/spatial/epoch_199.pth \
                        --mode spatial --n_samples 16
-    python evaluate.py --checkpoint checkpoints/spectral/ckpt_epoch_199.pth \
+    python evaluate.py --checkpoint checkpoints_amazon/spectral/epoch_199.pth \
                        --mode spectral --n_samples 16
 """
 
@@ -23,70 +23,58 @@ from train_spectral_bottleneck import spectral_translate
 
 
 def load_generators(checkpoint_path, device):
-    G_P2S = Generator().to(device)
-    G_S2P = Generator().to(device)
+    G_A2D = Generator().to(device)
+    G_D2A = Generator().to(device)
     ckpt  = torch.load(checkpoint_path, map_location=device)
-    G_P2S.load_state_dict(ckpt['G_P2S'])
-    G_S2P.load_state_dict(ckpt['G_S2P'])
-    G_P2S.eval()
-    G_S2P.eval()
-    return G_P2S, G_S2P
-
-
-def translate(G_P2S, G_S2P, img, mode, ref=None, beta=config.BETA_FREQ):
-    """Run forward translation in either spatial or spectral mode."""
-    if mode == 'spatial':
-        fake_S = G_P2S(img)
-        fake_P = G_S2P(img)
-    else:
-        fake_S = spectral_translate(G_P2S, img, ref, beta)
-        fake_P = spectral_translate(G_S2P, img, img, beta)
-    return fake_S, fake_P
+    G_A2D.load_state_dict(ckpt['G_P2S'])
+    G_D2A.load_state_dict(ckpt['G_S2P'])
+    G_A2D.eval()
+    G_D2A.eval()
+    return G_A2D, G_D2A
 
 
 def evaluate(checkpoint_path, mode='spatial', n_samples=16,
              save_dir='outputs/eval'):
     device = torch.device(config.DEVICE)
-    G_P2S, G_S2P = load_generators(checkpoint_path, device)
+    G_A2D, G_D2A = load_generators(checkpoint_path, device)
 
-    loader_photo, loader_sketch = get_loaders()
+    loader_A, loader_D = get_loaders()
 
     os.makedirs(save_dir, exist_ok=True)
 
-    photos  = []
-    sketches = []
-    for real_P in loader_photo:
-        photos.append(real_P)
-        if len(photos) >= n_samples:
+    amazons = []
+    webcams   = []
+    for real_A in loader_A:
+        amazons.append(real_A)
+        if len(amazons) >= n_samples:
             break
-    for real_S in loader_sketch:
-        sketches.append(real_S)
-        if len(sketches) >= n_samples:
+    for real_D in loader_D:
+        webcams.append(real_D)
+        if len(webcams) >= n_samples:
             break
 
-    photos   = torch.cat(photos[:n_samples], dim=0).to(device)
-    sketches = torch.cat(sketches[:n_samples], dim=0).to(device)
+    amazons = torch.cat(amazons[:n_samples], dim=0).to(device)
+    webcams   = torch.cat(webcams[:n_samples],   dim=0).to(device)
 
     with torch.no_grad():
         if mode == 'spatial':
-            fake_S = G_P2S(photos)
-            fake_P = G_S2P(sketches)
+            fake_D = G_A2D(amazons)
+            fake_A = G_D2A(webcams)
         else:
-            # Use first sketch batch as reference style
-            fake_S = spectral_translate(G_P2S, photos,   sketches, config.BETA_FREQ)
-            fake_P = spectral_translate(G_S2P, sketches, photos,   config.BETA_FREQ)
+            fake_D = spectral_translate(G_A2D, amazons, config.BETA_FREQ)
+            fake_A = spectral_translate(G_D2A, webcams,   config.BETA_FREQ)
 
-    # Save photo → sketch grid
-    grid_P2S = torchvision.utils.make_grid(
-        torch.cat([denorm(photos), denorm(fake_S)], dim=0), nrow=n_samples
+    # Save amazon → webcam grid
+    grid_A2D = torchvision.utils.make_grid(
+        torch.cat([denorm(amazons), denorm(fake_D)], dim=0), nrow=n_samples
     )
-    torchvision.utils.save_image(grid_P2S, os.path.join(save_dir, 'photo_to_sketch.png'))
+    torchvision.utils.save_image(grid_A2D, os.path.join(save_dir, 'amazon_to_webcam.png'))
 
-    # Save sketch → photo grid
-    grid_S2P = torchvision.utils.make_grid(
-        torch.cat([denorm(sketches), denorm(fake_P)], dim=0), nrow=n_samples
+    # Save webcam → amazon grid
+    grid_D2A = torchvision.utils.make_grid(
+        torch.cat([denorm(webcams), denorm(fake_A)], dim=0), nrow=n_samples
     )
-    torchvision.utils.save_image(grid_S2P, os.path.join(save_dir, 'sketch_to_photo.png'))
+    torchvision.utils.save_image(grid_D2A, os.path.join(save_dir, 'webcam_to_amazon.png'))
 
     print(f'Saved evaluation grids to {save_dir}/')
 

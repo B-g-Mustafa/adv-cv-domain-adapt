@@ -2,6 +2,7 @@
 Pure Frequency Spectral CycleGAN training script.
 The GAN architecture operates entirely on normalized low-frequency
 amplitude maps. Spatial pixels are only reconstructed for visualization.
+Amazon ↔ webcam domain adaptation on the Office-31 dataset.
 """
 
 import itertools
@@ -140,142 +141,141 @@ def build_lr_lambda(num_epochs=config.NUM_EPOCHS):
 # -------------------------------------------------------------------- training
 def train():
     device = torch.device(config.DEVICE)
-    loader_photo, loader_sketch = get_loaders()
-    print(f'Photo images : {len(loader_photo.dataset)}')
-    print(f'Sketch images: {len(loader_sketch.dataset)}')
+    loader_A, loader_D = get_loaders()
+    print(f'Amazon images: {len(loader_A.dataset)}')
+    print(f'webcam images  : {len(loader_D.dataset)}')
 
     # Initialize standard models. They don't need to know they are processing
     # frequencies instead of pixels; to them, it's just a 3-channel [0,1] tensor.
-    G_P2S = Generator().to(device)
-    G_S2P = Generator().to(device)
-    D_P = Discriminator().to(device)
-    D_S = Discriminator().to(device)
+    G_A2D = Generator().to(device)
+    G_D2A = Generator().to(device)
+    D_A = Discriminator().to(device)
+    D_D = Discriminator().to(device)
 
-    init_weights(G_P2S)
-    init_weights(G_S2P)
-    init_weights(D_P)
-    init_weights(D_S)
+    init_weights(G_A2D)
+    init_weights(G_D2A)
+    init_weights(D_A)
+    init_weights(D_D)
 
     if config.USE_PRETRAINED:
-        load_pretrained_encoder(G_P2S)
-        load_pretrained_encoder(G_S2P)
+        load_pretrained_encoder(G_A2D)
+        load_pretrained_encoder(G_D2A)
 
     criterion_GAN = nn.MSELoss()
     criterion_cycle = nn.L1Loss()
     criterion_identity = nn.L1Loss()
 
     optimizer_G = torch.optim.Adam(
-        itertools.chain(G_P2S.parameters(), G_S2P.parameters()),
+        itertools.chain(G_A2D.parameters(), G_D2A.parameters()),
         lr=config.LR, betas=(config.BETA1, config.BETA2),
     )
-    optimizer_D_P = torch.optim.Adam(D_P.parameters(), lr=config.LR, betas=(config.BETA1, config.BETA2))
-    optimizer_D_S = torch.optim.Adam(D_S.parameters(), lr=config.LR, betas=(config.BETA1, config.BETA2))
+    optimizer_D_A = torch.optim.Adam(D_A.parameters(), lr=config.LR, betas=(config.BETA1, config.BETA2))
+    optimizer_D_D = torch.optim.Adam(D_D.parameters(), lr=config.LR, betas=(config.BETA1, config.BETA2))
 
     lr_lambda = build_lr_lambda(config.NUM_EPOCHS)
     scheduler_G = torch.optim.lr_scheduler.LambdaLR(optimizer_G, lr_lambda)
-    scheduler_D_P = torch.optim.lr_scheduler.LambdaLR(optimizer_D_P, lr_lambda)
-    scheduler_D_S = torch.optim.lr_scheduler.LambdaLR(optimizer_D_S, lr_lambda)
+    scheduler_D_A = torch.optim.lr_scheduler.LambdaLR(optimizer_D_A, lr_lambda)
+    scheduler_D_D = torch.optim.lr_scheduler.LambdaLR(optimizer_D_D, lr_lambda)
 
-    buffer_S = ReplayBuffer(config.BUFFER_SIZE)
-    buffer_P = ReplayBuffer(config.BUFFER_SIZE)
+    buffer_D = ReplayBuffer(config.BUFFER_SIZE)
+    buffer_A = ReplayBuffer(config.BUFFER_SIZE)
 
     # I recommend starting with 0.05 for pure frequency mapping
     beta = getattr(config, 'BETA_FREQ', 0.05)
 
     print("=" * 50)
-    print(f"  PURE FREQUENCY CycleGAN — PACS Photo -> Sketch")
+    print(f"  PURE FREQUENCY CycleGAN — Office-31 Amazon → webcam")
     print(f"  Beta Window        : {beta}")
     print("=" * 50)
 
     for epoch in range(config.NUM_EPOCHS):
-        for batch_idx, (real_P_img, real_S_img) in enumerate(zip(loader_photo, loader_sketch)):
+        for batch_idx, (real_A_img, real_D_img) in enumerate(zip(loader_A, loader_D)):
 
-            real_P_img = real_P_img.to(device)
-            real_S_img = real_S_img.to(device)
+            real_A_img = real_A_img.to(device)
+            real_D_img = real_D_img.to(device)
 
             # ================== PRE-PROCESSING TO AMPLITUDE MAPS ==================
             # Transform spatial images into GAN-ready amplitude maps
-            amp_P, phase_P, vmin_P, vmax_P, mask_P, fft_P = encode_to_amplitude_map(real_P_img, beta)
-            amp_S, phase_S, vmin_S, vmax_S, mask_S, fft_S = encode_to_amplitude_map(real_S_img, beta)
+            amp_A, phase_A, vmin_A, vmax_A, mask_A, fft_A = encode_to_amplitude_map(real_A_img, beta)
+            amp_D, phase_D, vmin_D, vmax_D, mask_D, fft_D = encode_to_amplitude_map(real_D_img, beta)
 
             # ====================== Train Generators ======================
             optimizer_G.zero_grad()
 
             # Identity loss (using amplitude maps)
-            id_amp_P = G_S2P(amp_P)
-            id_amp_S = G_P2S(amp_S)
-            loss_id_P = criterion_identity(id_amp_P, amp_P)
-            loss_id_S = criterion_identity(id_amp_S, amp_S)
+            id_amp_A = G_D2A(amp_A)
+            id_amp_D = G_A2D(amp_D)
+            loss_id_A = criterion_identity(id_amp_A, amp_A)
+            loss_id_D = criterion_identity(id_amp_D, amp_D)
 
             # Forward translations
-            fake_amp_S = G_P2S(amp_P)
-            fake_amp_P = G_S2P(amp_S)
+            fake_amp_D = G_A2D(amp_A)
+            fake_amp_A = G_D2A(amp_D)
 
             # Adversarial losses
-            loss_adv_P2S = criterion_GAN(D_S(fake_amp_S), torch.ones_like(D_S(fake_amp_S)))
-            loss_adv_S2P = criterion_GAN(D_P(fake_amp_P), torch.ones_like(D_P(fake_amp_P)))
+            loss_adv_A2D = criterion_GAN(D_D(fake_amp_D), torch.ones_like(D_D(fake_amp_D)))
+            loss_adv_D2A = criterion_GAN(D_A(fake_amp_A), torch.ones_like(D_A(fake_amp_A)))
 
             # Cycle consistency losses
-            rec_amp_P = G_S2P(fake_amp_S)
-            rec_amp_S = G_P2S(fake_amp_P)
-            loss_cycle_P = criterion_cycle(rec_amp_P, amp_P)
-            loss_cycle_S = criterion_cycle(rec_amp_S, amp_S)
+            rec_amp_A = G_D2A(fake_amp_D)
+            rec_amp_D = G_A2D(fake_amp_A)
+            loss_cycle_A = criterion_cycle(rec_amp_A, amp_A)
+            loss_cycle_D = criterion_cycle(rec_amp_D, amp_D)
 
             loss_G = (
-                    loss_adv_P2S + loss_adv_S2P
-                    + config.LAMBDA_CYCLE * (loss_cycle_P + loss_cycle_S)
-                    + config.LAMBDA_IDENTITY * (loss_id_P + loss_id_S)
+                    loss_adv_A2D + loss_adv_D2A
+                    + config.LAMBDA_CYCLE * (loss_cycle_A + loss_cycle_D)
+                    + config.LAMBDA_IDENTITY * (loss_id_A + loss_id_D)
             )
             loss_G.backward()
             optimizer_G.step()
 
-            # ================== Train Discriminator D_S ===================
-            optimizer_D_S.zero_grad()
-            fake_amp_S_buf = buffer_S.push_and_pop(fake_amp_S.detach())
-            pred_real_S = D_S(amp_S)
-            pred_fake_S = D_S(fake_amp_S_buf)
-            loss_D_S = (criterion_GAN(pred_real_S, torch.ones_like(pred_real_S)) +
-                        criterion_GAN(pred_fake_S, torch.zeros_like(pred_fake_S))) * 0.5
-            loss_D_S.backward()
-            optimizer_D_S.step()
+            # ================== Train Discriminator D_D ===================
+            optimizer_D_D.zero_grad()
+            fake_amp_D_buf = buffer_D.push_and_pop(fake_amp_D.detach())
+            pred_real_D = D_D(amp_D)
+            pred_fake_D = D_D(fake_amp_D_buf)
+            loss_D_D = (criterion_GAN(pred_real_D, torch.ones_like(pred_real_D)) +
+                        criterion_GAN(pred_fake_D, torch.zeros_like(pred_fake_D))) * 0.5
+            loss_D_D.backward()
+            optimizer_D_D.step()
 
-            # ================== Train Discriminator D_P ===================
-            optimizer_D_P.zero_grad()
-            fake_amp_P_buf = buffer_P.push_and_pop(fake_amp_P.detach())
-            pred_real_P = D_P(amp_P)
-            pred_fake_P = D_P(fake_amp_P_buf)
-            loss_D_P = (criterion_GAN(pred_real_P, torch.ones_like(pred_real_P)) +
-                        criterion_GAN(pred_fake_P, torch.zeros_like(pred_fake_P))) * 0.5
-            loss_D_P.backward()
-            optimizer_D_P.step()
+            # ================== Train Discriminator D_A ===================
+            optimizer_D_A.zero_grad()
+            fake_amp_A_buf = buffer_A.push_and_pop(fake_amp_A.detach())
+            pred_real_A = D_A(amp_A)
+            pred_fake_A = D_A(fake_amp_A_buf)
+            loss_D_A = (criterion_GAN(pred_real_A, torch.ones_like(pred_real_A)) +
+                        criterion_GAN(pred_fake_A, torch.zeros_like(pred_fake_A))) * 0.5
+            loss_D_A.backward()
+            optimizer_D_A.step()
 
             if batch_idx % 50 == 0:
                 print(f'Epoch [{epoch:3d}/{config.NUM_EPOCHS}] '
                       f'Batch [{batch_idx:4d}] '
                       f'loss_G={loss_G.item():.4f} '
-                      f'loss_D_P={loss_D_P.item():.4f} '
-                      f'loss_D_S={loss_D_S.item():.4f}')
+                      f'loss_D_A={loss_D_A.item():.4f} '
+                      f'loss_D_D={loss_D_D.item():.4f}')
 
         scheduler_G.step()
-        scheduler_D_P.step()
-        scheduler_D_S.step()
+        scheduler_D_A.step()
+        scheduler_D_D.step()
 
         # ====================== RECONSTRUCT IMAGES FOR SAVING ======================
         if epoch % config.SAVE_EVERY == 0:
             with torch.no_grad():
                 # We use decode_to_spatial_image to translate the GAN's amplitude map back into pixels
-                fake_S_img = decode_to_spatial_image(fake_amp_S, phase_P, vmin_P, vmax_P, mask_P, fft_P)
-                fake_P_img = decode_to_spatial_image(fake_amp_P, phase_S, vmin_S, vmax_S, mask_S, fft_S)
+                fake_D_img = decode_to_spatial_image(fake_amp_D, phase_A, vmin_A, vmax_A, mask_A, fft_A)
+                fake_A_img = decode_to_spatial_image(fake_amp_A, phase_D, vmin_D, vmax_D, mask_D, fft_D)
 
                 # Save out the spatial pixels so you can evaluate the visual quality
-                save_images(epoch, real_P_img, fake_S_img, real_S_img, fake_P_img,
+                save_images(epoch, real_A_img, fake_D_img, real_D_img, fake_A_img,
                             save_dir=config.OUTPUT_DIR + '/pure_spectral')
         # ====================== SAVE CHECKPOINTS ======================
         if (epoch + 1) % config.SAVE_CHECKPOINT_EVERY == 0:
             save_checkpoint(
-                epoch, G_P2S, G_S2P, D_P, D_S,
-                optimizer_G, optimizer_D_P, optimizer_D_S,
-                # Change the directory so you don't overwrite your bottleneck run!
+                epoch, G_A2D, G_D2A, D_A, D_D,
+                optimizer_G, optimizer_D_A, optimizer_D_D,
                 checkpoint_dir=config.CHECKPOINT_DIR + '/pure_spectral',
                 use_pretrained=config.USE_PRETRAINED,
             )

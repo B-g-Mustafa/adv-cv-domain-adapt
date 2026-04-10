@@ -19,9 +19,9 @@ USE_PRETRAINED  = True   # toggle: True = load ResNet-18 encoder weights
 BETA_FREQ       = 0.5          # fraction of spectrum to translate (tune this)
 
 # Paths
-DATA_ROOT       = 'data/pacs'
-OUTPUT_DIR      = 'outputs'
-CHECKPOINT_DIR  = 'checkpoints'
+DATA_ROOT       = 'data/Office31'
+OUTPUT_DIR      = 'outputs_amazon'
+CHECKPOINT_DIR  = 'checkpoints_amazon'
 SAVE_CHECKPOINT_EVERY = 20
 
 # Resume controls

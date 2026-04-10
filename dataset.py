@@ -44,31 +44,31 @@ class FlatImageDataset(Dataset):
 
 def get_loaders(data_root=config.DATA_ROOT):
     """
-    Returns (loader_photo, loader_sketch).
+    Returns (loader_A, loader_D) for Office-31 Amazon and webcam domains.
     Expected structure:
-        <data_root>/photo/<class>/img.jpg
-        <data_root>/sketch/<class>/img.jpg
+        <data_root>/amazon/<class>/img.jpg
+        <data_root>/webcam/<class>/img.jpg
     """
-    photo_dir  = os.path.join(data_root, 'photo')
-    sketch_dir = os.path.join(data_root, 'sketch')
+    amazon_dir = os.path.join(data_root, 'amazon')
+    webcam_dir   = os.path.join(data_root, 'webcam')
 
     transform = _build_transform()
 
-    ds_photo  = FlatImageDataset(photo_dir,  transform)
-    ds_sketch = FlatImageDataset(sketch_dir, transform)
+    ds_amazon = FlatImageDataset(amazon_dir, transform)
+    ds_webcam   = FlatImageDataset(webcam_dir,   transform)
 
-    loader_photo = DataLoader(
-        ds_photo,
+    loader_A = DataLoader(
+        ds_amazon,
         batch_size=config.BATCH_SIZE,
         shuffle=True,
         num_workers=config.NUM_WORKERS,
         drop_last=True,
     )
-    loader_sketch = DataLoader(
-        ds_sketch,
+    loader_D = DataLoader(
+        ds_webcam,
         batch_size=config.BATCH_SIZE,
         shuffle=True,
         num_workers=config.NUM_WORKERS,
         drop_last=True,
     )
-    return loader_photo, loader_sketch
+    return loader_A, loader_D
