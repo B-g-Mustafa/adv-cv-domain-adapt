@@ -22,4 +22,7 @@ USE_PRETRAINED = True
 # 2 = freeze conv1 + bn1 + layer1
 # 3 = freeze conv1 + bn1 + layer1 + layer2
 # 4 = freeze conv1 + bn1 + layer1 + layer2 + layer3
-FREEZE_LAYERS = 2
+FREEZE_LAYERS = 4
+
+EARLY_STOPPING_PATIENCE  = 5      # stop if no improvement for 5 epochs
+EARLY_STOPPING_MIN_DELTA = 0.001  # minimum improvement to count as progress (0.1%)
