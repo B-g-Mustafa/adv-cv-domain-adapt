@@ -2,9 +2,9 @@ import os
 
 import torch
 
-import config
-from dataset import get_dataloaders
-from model import get_model
+from resnet_finetune import config
+from resnet_finetune.dataset import get_dataloaders
+from resnet_finetune.model import get_model
 
 
 # Load the saved checkpoint and restore model weights and class names.

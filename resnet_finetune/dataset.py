@@ -6,7 +6,7 @@ from sklearn.model_selection import train_test_split
 from torch.utils.data import Dataset, DataLoader
 from torchvision import transforms
 
-import config
+from resnet_finetune import config
 
 EXTENSIONS = {'.jpg', '.jpeg', '.png', '.bmp', '.webp'}
 

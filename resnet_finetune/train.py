@@ -3,10 +3,10 @@ import os
 import torch
 import torch.nn as nn
 
-import config
-from config import EARLY_STOPPING_PATIENCE, EARLY_STOPPING_MIN_DELTA
-from dataset import get_dataloaders
-from model import get_model
+from resnet_finetune import config
+from resnet_finetune.config import EARLY_STOPPING_PATIENCE, EARLY_STOPPING_MIN_DELTA
+from resnet_finetune.dataset import get_dataloaders
+from resnet_finetune.model import get_model
 
 
 class EarlyStopping:

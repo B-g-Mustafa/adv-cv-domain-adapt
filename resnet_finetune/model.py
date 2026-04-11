@@ -1,7 +1,7 @@
 import torch.nn as nn
 from torchvision import models
 
-import config
+from resnet_finetune import config
 
 
 # Load ResNet-50, replace the classification head, and freeze early layers.
