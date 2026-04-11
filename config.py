@@ -19,11 +19,18 @@ USE_PRETRAINED  = True   # toggle: True = load ResNet-18 encoder weights
 BETA_FREQ_PURE       = 0.08          # fraction of spectrum to translate (tune this)
 BETA_FREQ_BOTTLENECK       = 0.1
 
+#Cycada Only
+LAMBDA_TASK = 1
+
 # Paths
-DATA_ROOT       = 'data/Office31'
+DATA_ROOT       = '../Office-31'
 OUTPUT_DIR      = 'outputs_amazon'
 CHECKPOINT_DIR  = 'checkpoints_amazon'
 SAVE_CHECKPOINT_EVERY = 20
+
+#Finetuned Resnet path
+
+RESNET_WEIGHTS = ""
 
 # Resume controls
 RESUME          = False   # True = resume from a checkpoint
