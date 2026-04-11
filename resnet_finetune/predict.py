@@ -5,8 +5,8 @@ import torch
 from PIL import Image
 from torchvision import transforms
 
-import config
-from model import get_model
+from resnet_finetune import config
+from resnet_finetune.model import get_model
 
 
 # Load the saved checkpoint and restore model weights and class names.

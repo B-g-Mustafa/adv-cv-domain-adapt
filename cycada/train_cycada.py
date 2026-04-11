@@ -9,7 +9,10 @@ from models import Generator, Discriminator, init_weights, load_pretrained_encod
 from resnet_finetune.predict import get_model
 
 import config
-from cycada_dataloader import get_loaders
+try:
+    from .cycada_dataloader import get_loaders
+except ImportError:
+    from cycada_dataloader import get_loaders
 from utils import ReplayBuffer, save_images, save_checkpoint, find_latest_checkpoint, load_checkpoint
 
 
