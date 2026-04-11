@@ -33,7 +33,7 @@ def load_frozen_classifier(device):
     Loads the pre-trained ResNet, freezes its weights,
     and sets it to eval mode so it can grade the GAN.
     """
-    save_path = os.path.join(config.OUTPUT_DIR, 'best_model.pth')
+    save_path = config.RESNET_WEIGHTS
     if not os.path.exists(save_path):
         raise FileNotFoundError(f'Teacher model not found at {save_path}. Train ResNet first!')
 
