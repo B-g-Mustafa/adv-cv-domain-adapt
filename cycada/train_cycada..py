@@ -218,7 +218,24 @@ def train():
         scheduler_D_A.step()
         scheduler_D_D.step()
 
-        # ... (Save images and checkpoints code omitted for brevity) ...
+        # ====================== SAVE SAMPLE IMAGES ======================
+        if epoch % config.SAVE_EVERY == 0:
+            with torch.no_grad():
+                save_images(epoch, real_A, fake_D, real_D, fake_A,
+                            # UPDATE: Changed directory to separate from baseline CycleGAN
+                            save_dir=config.OUTPUT_DIR + '/cycada')
+
+        # ====================== SAVE CHECKPOINTS ======================
+        if (epoch + 1) % config.SAVE_CHECKPOINT_EVERY == 0:
+            # Note: We intentionally do NOT save `source_classifier` here.
+            # Its weights are frozen, so the original pre-trained file is all you need.
+            save_checkpoint(
+                epoch, G_A2D, G_D2A, D_A, D_D,
+                optimizer_G, optimizer_D_A, optimizer_D_D,
+                # UPDATE: Changed directory to separate from baseline CycleGAN
+                checkpoint_dir=config.CHECKPOINT_DIR + '/cycada',
+                use_pretrained=config.USE_PRETRAINED,
+            )
 
     print('CyCADA Training complete.')
 
