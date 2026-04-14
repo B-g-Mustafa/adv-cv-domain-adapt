@@ -30,7 +30,7 @@ SAVE_CHECKPOINT_EVERY = 20
 
 #Finetuned Resnet path
 
-RESNET_WEIGHTS = ""
+RESNET_WEIGHTS = "/home/users/ntu/birul001/adv-cv-project-2/gan-domain-adapt/checkpoints_amazon/classifier/baseline/baseline_best_model.pth"
 
 # Resume controls
 RESUME          = False   # True = resume from a checkpoint
